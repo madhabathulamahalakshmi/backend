@@ -1,9 +1,8 @@
 fastapi
 uvicorn
-pymongo
+motor
 python-dotenv
-openai
+pydantic
 pillow
 requests
-aiofiles
 python-multipart
