@@ -6,4 +6,5 @@ pydantic
 pillow
 requests
 python-multipart
-emergentintegrations>=0.3.0
+openai
+
