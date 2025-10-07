@@ -54,86 +54,88 @@ class Settings(BaseModel):
     auto_hashtags: bool = True
 
 # AI Caption Generation Service
+import os
+import logging
+import uuid
+import base64
+import random
+from openai import AsyncOpenAI
+
 class CaptionAIService:
     def __init__(self):
-        self.api_key = os.getenv("EMERGENT_LLM_KEY")
+        self.api_key = os.getenv("OPENAI_API_KEY")
         if not self.api_key:
-            raise ValueError("EMERGENT_LLM_KEY not found in environment variables")
-        
+            raise ValueError("OPENAI_API_KEY not found in environment variables")
+        self.client = AsyncOpenAI(api_key=self.api_key)
+
     async def generate_caption(self, image_base64: str, style: str, auto_hashtags: bool = True) -> dict:
         try:
-            # Import the LLM integration library
-            from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
-            
-            # Style-specific prompts
+            # 🎨 Style-specific prompts
             style_prompts = {
-                "funny": "Create a funny, witty, and humorous caption for this image. Be playful, use puns if appropriate, and make it entertaining. Keep it lighthearted and clever.",
-                "motivational": "Create an inspiring and motivational caption for this image. Focus on positive energy, encouragement, growth mindset, and empowerment. Make it uplifting and inspiring.",
-                "professional": "Create a professional, business-appropriate caption for this image. Keep it polished, sophisticated, and suitable for LinkedIn or corporate settings. Be concise and impactful.",
-                "aesthetic": "Create a beautiful, artistic, and aesthetic caption for this image. Focus on mood, atmosphere, visual elements, and poetic language. Make it dreamy and visually appealing."
+                "funny": "Create a funny, witty, and humorous caption for this image. Be playful, use puns if appropriate, and make it entertaining.",
+                "motivational": "Create an inspiring and motivational caption for this image. Focus on positive energy, encouragement, and empowerment.",
+                "professional": "Create a professional, business-appropriate caption for this image. Keep it polished, sophisticated, and suitable for LinkedIn or corporate posts.",
+                "aesthetic": "Create a beautiful, artistic, and aesthetic caption for this image. Focus on mood, atmosphere, and poetic language."
             }
-            
+
             base_prompt = style_prompts.get(style, style_prompts["aesthetic"])
             
             hashtag_instruction = ""
             if auto_hashtags:
-                hashtag_instruction = "\n\nAlso provide 5-8 relevant hashtags separated by commas at the end after the caption. Format: Caption text\n\nHashtags: #tag1, #tag2, #tag3"
+                hashtag_instruction = "\n\nAlso provide 5-8 relevant hashtags separated by commas at the end after the caption. Format:\nCaption text\n\nHashtags: #tag1, #tag2, #tag3"
             
             full_prompt = f"{base_prompt}{hashtag_instruction}\n\nKeep the caption under 150 characters for social media compatibility."
-            
-            # Initialize chat with GPT-4o for image analysis
-            chat = LlmChat(
-                api_key=self.api_key,
-                session_id=f"caption_{uuid.uuid4()}",
-                system_message="You are a creative social media caption generator. You analyze images and create engaging captions in different styles."
-            ).with_model("openai", "gpt-4o")
-            
-            # Create image content from base64
-            image_content = ImageContent(image_base64=image_base64)
-            
-            # Create user message with image
-            user_message = UserMessage(
-                text=full_prompt,
-                file_contents=[image_content]
-            )
-            
-            # Generate caption
-            import random
 
-# Add slight randomness for varied outputs
+            # 🎲 Add small randomness for variety
             temperature = random.uniform(0.7, 1.0)
-            
-            response = await chat.send_message(user_message, temperature=temperature)
 
-            
-            # Parse response
-            caption_text = response.strip()
+            # 🧠 Call OpenAI GPT-4o model with image
+            response = await self.client.chat.completions.create(
+                model="gpt-4o-mini",  # you can also use gpt-4o if you want higher quality
+                messages=[
+                    {"role": "system", "content": "You are a creative social media caption generator that analyzes images and creates engaging captions in different styles."},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": full_prompt},
+                            {"type": "image_url", "image_url": f"data:image/jpeg;base64,{image_base64}"}
+                        ]
+                    }
+                ],
+                temperature=temperature,
+                max_tokens=200
+            )
+
+            caption_text = response.choices[0].message.content.strip()
+
             hashtags = []
-            
             if auto_hashtags and "Hashtags:" in caption_text:
                 parts = caption_text.split("Hashtags:")
                 caption_text = parts[0].strip()
                 hashtag_text = parts[1].strip()
-                hashtags = [tag.strip() for tag in hashtag_text.replace('#', '').split(',') if tag.strip()]
-            
+                hashtags = [tag.strip().replace("#", "") for tag in hashtag_text.split(",") if tag.strip()]
+
             return {
                 "caption": caption_text,
                 "hashtags": hashtags
             }
-            
+
         except Exception as e:
             logging.error(f"Error generating caption: {str(e)}")
-            # Fallback captions if AI fails
+
+            # 🩹 Fallback captions if AI fails
             fallback_captions = {
                 "funny": "When life gives you moments, capture them! 📸",
                 "motivational": "Every moment is a new beginning. ✨",
                 "professional": "Excellence in every detail.",
                 "aesthetic": "Beauty in the everyday moments."
             }
+
             return {
                 "caption": fallback_captions.get(style, "Capturing life's beautiful moments."),
                 "hashtags": ["life", "moments", "photography", "memories"] if auto_hashtags else []
             }
+
 
 # Initialize AI service
 try:
