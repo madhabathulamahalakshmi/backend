@@ -98,7 +98,13 @@ class CaptionAIService:
             )
             
             # Generate caption
-            response = await chat.send_message(user_message)
+            import random
+
+# Add slight randomness for varied outputs
+            temperature = random.uniform(0.7, 1.0)
+            
+            response = await chat.send_message(user_message, temperature=temperature)
+
             
             # Parse response
             caption_text = response.strip()
